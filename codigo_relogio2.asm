@@ -1,6 +1,6 @@
 .INCLUDE "m328Pdef.inc"
 
-.equ BOTAO		= PB0
+.equ SEG_F		= PB0
 .equ DISPLAY	= PORTC
 
 .equ PIN_SEG_UNI 	= PB1
@@ -18,12 +18,7 @@
 .def AUX		= R17
 .def DECODENUM  = R25
 .def MODE_SELECT = R26
-
-.def CRON_SEG_UNI = R27
-.def CRON_SEG_DEZ = R28
-.def CRON_MIN_UNI = R29
-.def CRON_MIN_DEZ = R30
-.def CRON_RESET = R31
+.def DEC_OU_INC	 = R27
 
 .ORG 0x00
 RJMP init
@@ -35,8 +30,9 @@ RJMP EXT_INT0
 RJMP EXT_INT1
 
 init:
+	LDI DEC_OU_INC, 0x01
 	LDI AUX,  0xFF
-	LDI SEG_DEZ, 0x05
+	LDI SEG_DEZ, 0x01
 	OUT DDRD, AUX
 	OUT DDRB, AUX
 	OUT PORTB,AUX
@@ -50,8 +46,13 @@ init:
     OUT EIMSK, AUX
     SEI   ; Ativa interrupções globais
 	
+	
 main:
-	RCALL delay
+	CPI DEC_OU_INC, 0x00
+	BREQ CHECKPOINT_MAINDEC_1
+
+	RCALL delay_1s
+	; RJMP decod
 	
 	CPI SEG_UNI, 0x09
 	BRNE incrSegUni
@@ -63,6 +64,8 @@ main:
 
 	LDI SEG_DEZ, 0x00
 
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 	CPI MIN_UNI, 0x09
 	BRNE incrMinUni
 	
@@ -72,8 +75,9 @@ main:
 	BRNE incrMinDez
 
 	LDI MIN_DEZ, 0x00
-	
-	
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 	CPI HOR_UNI, 0x09
 	BRNE incrHorUni
 	
@@ -88,13 +92,7 @@ main:
 	BREQ decod
 
     CPI MODE_SELECT, 0X01
-	BREQ checkpoint_decod_hora
-	
-	CPI MODE_SELECT, 0X02
-	BREQ checkpoint1MainCron
-
-	
-	
+	BREQ decod_hora
 
 incrSegUni:
 	INC SEG_UNI
@@ -102,10 +100,8 @@ incrSegUni:
 	BREQ decod
 
     CPI MODE_SELECT, 0X01
-	BREQ checkpoint_decod_hora
-	
-	RJMP mainCron
-	
+	BREQ decod_hora
+
 incrSegDez:
 	INC SEG_DEZ
     CPI MODE_SELECT, 0X00
@@ -113,9 +109,6 @@ incrSegDez:
 
     CPI MODE_SELECT, 0X01
 	BREQ decod_hora
-	
-	RJMP mainCron
-	
 
 incrMinUni:
 	INC MIN_UNI
@@ -125,8 +118,6 @@ incrMinUni:
     CPI MODE_SELECT, 0X01
 	BREQ decod_hora
 
-	RJMP mainCron
-	
 incrMinDez:
 	INC MIN_DEZ
     CPI MODE_SELECT, 0X00
@@ -134,12 +125,6 @@ incrMinDez:
 
     CPI MODE_SELECT, 0X01
 	BREQ decod_hora
-	
-	RJMP mainCron
-
-checkpoint1MainCron: RJMP mainCron
-
-checkpoint_decod_hora: RJMP decod_hora
 
 incrHorUni:
 	INC HOR_UNI
@@ -148,8 +133,6 @@ incrHorUni:
 
     CPI MODE_SELECT, 0X01
 	BREQ decod_hora
-	
-	RJMP maincron
 
 incrHorDez:
 	INC HOR_DEZ
@@ -158,17 +141,20 @@ incrHorDez:
 
     CPI MODE_SELECT, 0X01
 	BREQ decod_hora
-	
-	RJMP mainCron
+
+CHECKPOINT_MAINDEC_1: RJMP CHECKPOINT_MAINDEC_2
 
 decod:
+	CPI MODE_SELECT, 0X01
+	BREQ decod_hora
+
 	MOV DECODENUM, SEG_UNI
 	CBI PORTB, PIN_SEG_DEZ
 	SBI PORTB, PIN_SEG_UNI
 	CBI PORTB, PIN_MIN_UNI
 	CBI PORTB, PIN_MIN_DEZ
 	RCALL DECODIFICADOR
-	RCALL delay
+	;RCALL delay
 
 	MOV DECODENUM, SEG_DEZ
 	SBI PORTB, PIN_SEG_DEZ
@@ -176,7 +162,7 @@ decod:
 	CBI PORTB, PIN_MIN_UNI
 	CBI PORTB, PIN_MIN_DEZ
 	RCALL DECODIFICADOR
-	RCALL delay
+	;RCALL delay
 
 	MOV DECODENUM, MIN_UNI
 	CBI PORTB, PIN_SEG_DEZ
@@ -184,7 +170,7 @@ decod:
 	CBI PORTB, PIN_MIN_DEZ
 	SBI PORTB, PIN_MIN_UNI
 	RCALL DECODIFICADOR
-	RCALL delay
+	;RCALL delay
 
 	MOV DECODENUM, MIN_DEZ
 	CBI PORTB, PIN_SEG_DEZ
@@ -192,11 +178,9 @@ decod:
 	SBI PORTB, PIN_MIN_DEZ
 	CBI PORTB, PIN_MIN_UNI
 	RCALL DECODIFICADOR
-	RCALL delay
+	;RCALL delay
 
-	RJMP main
-	
-
+	RET
 
 decod_hora:
 	MOV DECODENUM, MIN_UNI
@@ -230,12 +214,15 @@ decod_hora:
 	CBI PORTB, PIN_MIN_UNI
 	RCALL DECODIFICADOR
 	RCALL delay
+	
+	RET
 
-    RJMP main
 
+
+CHECKPOINT_MAINDEC_2: RJMP CHECKPOINT_MAINDEC
 
 delay:
-	LDI R19, 16
+	LDI R19, 4
 	
 volta:
 	DEC R17
@@ -250,7 +237,6 @@ volta:
 	CPI R19, 0x00
 	BRNE volta
 	RET
-
 
 DECODIFICADOR:
 	CPI DECODENUM, 0x00
@@ -285,169 +271,192 @@ DECODIFICADOR:
 
 	LDI DECODENUM, 0x06
 	RJMP DISPLAYNUM
-
-
-
-checkpointMain: RJMP main
-
+CHECKPOINT_DECOD: RJMP decod
+CHECKPOINT_DECOD_HORA: RJMP decod_hora
+CHECKPOINT_MAINDEC: RJMP mainDec
+CHECKPOINT_MAIN: RJMP main
 case0:
 	LDI AUX, 0x40
+	SBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case1:
 	LDI AUX, 0x79
+	SBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case2:
 	LDI AUX, 0x24
+	CBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case3:
 	LDI AUX, 0x30
+	CBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case4:
 	LDI AUX, 0x19
+	CBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case5:
 	LDI AUX, 0x12
+	CBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case6:
 	LDI AUX, 0x02
+	CBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case7:
 	LDI AUX, 0x78
+	SBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case8:
 	LDI AUX, 0x00
+	CBI PORTB, SEG_F
 	RJMP DISPLAYNUM
 
 case9:
 	LDI AUX, 0x18
+	CBI PORTB, SEG_F
 
 DISPLAYNUM:
 	OUT DISPLAY, AUX
 	RET
+
+decSegUni:
+	DEC SEG_UNI
+    CPI MODE_SELECT, 0X00
+	BREQ CHECKPOINT_DECOD
+
+    CPI MODE_SELECT, 0X01
+	BREQ CHECKPOINT_DECOD_HORA
+
+decSegDez:
+	DEC SEG_DEZ
+    CPI MODE_SELECT, 0X00
+	BREQ CHECKPOINT_DECOD
+
+    CPI MODE_SELECT, 0X01
+	BREQ CHECKPOINT_DECOD_HORA
+
+decMinUni:
+	DEC MIN_UNI
+    CPI MODE_SELECT, 0X00
+	BREQ CHECKPOINT_DECOD
+
+    CPI MODE_SELECT, 0X01
+	BREQ CHECKPOINT_DECOD_HORA
+
+decMinDez:
+	DEC MIN_DEZ
+    CPI MODE_SELECT, 0X00
+	BREQ CHECKPOINT_DECOD
+
+    CPI MODE_SELECT, 0X01
+	BREQ CHECKPOINT_DECOD_HORA
+decHorUni:
+	DEC HOR_UNI
+    CPI MODE_SELECT, 0X00
+	BREQ CHECKPOINT_DECOD
+
+    CPI MODE_SELECT, 0X01
+	BREQ CHECKPOINT_DECOD_HORA
+decHorDez:
+	DEC HOR_DEZ
+    CPI MODE_SELECT, 0X00
+	BREQ CHECKPOINT_DECOD
+
+    CPI MODE_SELECT, 0X01
+	BREQ CHECKPOINT_DECOD_HORA	
 	
-;-----------------------------------------------------------	
-incrCronSegUni:
-	INC CRON_SEG_UNI
-    RJMP decod_cron
+CHECKPOINT_MAINDEC_3: RJMP CHECKPOINT_MAINDEC
 
-incrCronSegDez:
-	INC CRON_SEG_DEZ
-    RJMP decod_cron
+mainDec:
+	CPI DEC_OU_INC, 0x01
+	BREQ CHECKPOINT_MAINDEC_3
 
-incrCronMinUni:
-	INC CRON_MIN_UNI
-    RJMP decod_cron
+	RCALL delay_1s
+			
+	CPI SEG_UNI, 0x00
+	BRNE decSegUni
 
-incrCronMinDez:
-	INC CRON_MIN_DEZ
-    RJMP decod_cron
+	LDI SEG_UNI, 0x09
+
+	CPI SEG_DEZ, 0x00
+	BRNE decSegDez
+
+	LDI SEG_DEZ, 0x06
+
+	CPI MIN_UNI, 0x00
+	BRNE decMinUni
 	
+	LDI MIN_UNI, 0x09
 
-mainCron:
-	RCALL delay
-	
-	CPI MODE_SELECT, 0X02
-	BRNE checkpointMain
-	
-	CPI CRON_RESET, 0X01
-	BREQ decod_cron
-	
-	CPI CRON_SEG_UNI, 0x09
-	BRNE incrCronSegUni
+	CPI MIN_DEZ, 0x00
+	BRNE decMinDez
 
-	LDI CRON_SEG_UNI, 0x00
+	LDI MIN_DEZ, 0x06
 
-	CPI CRON_SEG_DEZ, 0x05
-	BRNE incrCronSegDez
-
-	LDI CRON_SEG_DEZ, 0x00
-
-	CPI CRON_MIN_UNI, 0x09
-	BRNE incrCronMinUni
+	CPI HOR_UNI, 0x00
+	BRNE decHorUni
 	
-	LDI CRON_MIN_UNI, 0x00
+	LDI HOR_UNI, 0x09
 
-	CPI CRON_MIN_DEZ, 0x05
-	BRNE incrCronMinDez
+	CPI HOR_DEZ, 0x00
+	BRNE decHorDez
 
-	LDI CRON_MIN_DEZ, 0x00
+	LDI HOR_DEZ, 0x09
 	
-	
-	
-decod_cron:
-	MOV DECODENUM, CRON_SEG_UNI
-	CBI PORTB, PIN_SEG_DEZ
-	SBI PORTB, PIN_SEG_UNI
-	CBI PORTB, PIN_MIN_UNI
-	CBI PORTB, PIN_MIN_DEZ
-	RCALL DECODIFICADOR
-	RCALL delay
+	CPI DEC_OU_INC, 0X00
+	RJMP mainDec
 
-	MOV DECODENUM, CRON_SEG_DEZ
-	SBI PORTB, PIN_SEG_DEZ
-	CBI PORTB, PIN_SEG_UNI
-	CBI PORTB, PIN_MIN_UNI
-	CBI PORTB, PIN_MIN_DEZ
-	RCALL DECODIFICADOR
-	RCALL delay
-
-	MOV DECODENUM, CRON_MIN_UNI
-	CBI PORTB, PIN_SEG_DEZ
-	CBI PORTB, PIN_SEG_UNI
-	CBI PORTB, PIN_MIN_DEZ
-	SBI PORTB, PIN_MIN_UNI
-	RCALL DECODIFICADOR
-	RCALL delay
-
-	MOV DECODENUM, CRON_MIN_DEZ
-	CBI PORTB, PIN_SEG_DEZ
-	CBI PORTB, PIN_SEG_UNI
-	SBI PORTB, PIN_MIN_DEZ
-	CBI PORTB, PIN_MIN_UNI
-	RCALL DECODIFICADOR
-	RCALL delay
-
-	RJMP main
-	
-	
-	
-;--------------------------------------------------------------	
-	
 EXT_INT0:
-    CLI  ; Desativa interrupções globais temporariamente
-    CPI MODE_SELECT, 0x02
+    CLI 
+    CPI MODE_SELECT, 0x01
     BREQ RESET_MODE
-    INC MODE_SELECT  ; Alterna o modo
-    SEI  ; Reativa interrupções
-    RETI  ; Retorna da interrupção
+    INC MODE_SELECT  
+    SEI 
+    RETI  
 
 RESET_MODE:
-    LDI MODE_SELECT, 0x00  ; Reseta para o modo inicial
+    LDI MODE_SELECT, 0x00 
     SEI
     RETI
 
 EXT_INT1:
 	CLI
-	CPI CRON_RESET, 0X01
-	BREQ RESET_CRON
-	INC CRON_RESET
-	SEI
+	CPI DEC_OU_INC, 0x00
+	BREQ SET_PIN
+
+	LDI DEC_OU_INC, 0x00
 	RETI
-	
-RESET_CRON:
-	LDI CRON_RESET, 0X00
-	LDI CRON_SEG_UNI, 0X00
-	LDI CRON_SEG_DEZ, 0X00
-	LDI CRON_MIN_UNI, 0X00
-	LDI CRON_MIN_DEZ, 0X00
-	SEI
+
+SET_PIN:
+	LDI DEC_OU_INC, 0x01
 	RETI
+
+delay_1s:
+    LDI R17, 15  ;; Loop externo para 250 repetições
+loop_1s_outer:
+    LDI R18, 250  ;; Loop intermediário para 250 repetições
+loop_1s_middle:
+    LDI R19, 64   ;; Loop interno para 64 repetições
+loop_1s_inner:
+	RCALL decod
+    DEC R19
+    BRNE loop_1s_inner
+	RCALL decod
+    DEC R18
+    BRNE loop_1s_middle
+	RCALL decod
+    DEC R17
+    BRNE loop_1s_outer
 	
+    CPI DEC_OU_INC, 0X00
+	BREQ CHECKPOINT_MAINDEC_3
+	RJMP main
