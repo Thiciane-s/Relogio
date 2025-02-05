@@ -1,0 +1,453 @@
+.INCLUDE "m328Pdef.inc"
+
+.equ BOTAO		= PB0
+.equ DISPLAY	= PORTC
+
+.equ PIN_SEG_UNI 	= PB1
+.equ PIN_SEG_DEZ 	= PB2
+
+.equ PIN_MIN_UNI 	= PB3
+.equ PIN_MIN_DEZ 	= PB4
+
+.def SEG_UNI	= R16
+.def SEG_DEZ	= R20
+.def MIN_UNI 	= R21
+.def MIN_DEZ	= R22
+.def HOR_UNI 	= R23
+.def HOR_DEZ	= R24
+.def AUX		= R17
+.def DECODENUM  = R25
+.def MODE_SELECT = R26
+
+.def CRON_SEG_UNI = R27
+.def CRON_SEG_DEZ = R28
+.def CRON_MIN_UNI = R29
+.def CRON_MIN_DEZ = R30
+.def CRON_RESET = R31
+
+.ORG 0x00
+RJMP init
+
+.org 0x02  ;; Vetor de interrupção para PCINT0
+RJMP EXT_INT0
+
+.org 0x04
+RJMP EXT_INT1
+
+init:
+	LDI AUX,  0xFF
+	LDI SEG_DEZ, 0x05
+	OUT DDRD, AUX
+	OUT DDRB, AUX
+	OUT PORTB,AUX
+	OUT DDRC, AUX
+	OUT PORTC,AUX	
+	OUT PORTD, AUX
+    ;; Configuração da interrupção INT0 (D2 no ATmega328)
+    LDI AUX, 0b00001010  ;; Configura para borda de descida
+    STS EICRA, AUX       ;; Armazena no registrador de controle da interrupção
+    LDI AUX, 0b00000011   ;; Habilita a interrupção externa INT0
+    OUT EIMSK, AUX
+    SEI   ; Ativa interrupções globais
+	
+main:
+	RCALL delay
+	
+	CPI SEG_UNI, 0x09
+	BRNE incrSegUni
+
+	LDI SEG_UNI, 0x00
+
+	CPI SEG_DEZ, 0x05
+	BRNE incrSegDez
+
+	LDI SEG_DEZ, 0x00
+
+	CPI MIN_UNI, 0x09
+	BRNE incrMinUni
+	
+	LDI MIN_UNI, 0x00
+
+	CPI MIN_DEZ, 0x05
+	BRNE incrMinDez
+
+	LDI MIN_DEZ, 0x00
+	
+	
+	CPI HOR_UNI, 0x09
+	BRNE incrHorUni
+	
+	LDI HOR_UNI, 0x00
+
+	CPI HOR_DEZ, 0x01
+	BRNE incrHorDez
+
+	LDI HOR_DEZ, 0x00
+
+    CPI MODE_SELECT, 0X00
+	BREQ decod
+
+    CPI MODE_SELECT, 0X01
+	BREQ checkpoint_decod_hora
+	
+	CPI MODE_SELECT, 0X02
+	BREQ checkpoint1MainCron
+
+	
+	
+
+incrSegUni:
+	INC SEG_UNI
+    CPI MODE_SELECT, 0X00
+	BREQ decod
+
+    CPI MODE_SELECT, 0X01
+	BREQ checkpoint_decod_hora
+	
+	RJMP mainCron
+	
+incrSegDez:
+	INC SEG_DEZ
+    CPI MODE_SELECT, 0X00
+	BREQ decod
+
+    CPI MODE_SELECT, 0X01
+	BREQ decod_hora
+	
+	RJMP mainCron
+	
+
+incrMinUni:
+	INC MIN_UNI
+    CPI MODE_SELECT, 0X00
+	BREQ decod
+
+    CPI MODE_SELECT, 0X01
+	BREQ decod_hora
+
+	RJMP mainCron
+	
+incrMinDez:
+	INC MIN_DEZ
+    CPI MODE_SELECT, 0X00
+	BREQ decod
+
+    CPI MODE_SELECT, 0X01
+	BREQ decod_hora
+	
+	RJMP mainCron
+
+checkpoint1MainCron: RJMP mainCron
+
+checkpoint_decod_hora: RJMP decod_hora
+
+incrHorUni:
+	INC HOR_UNI
+    CPI MODE_SELECT, 0X00
+	BREQ decod
+
+    CPI MODE_SELECT, 0X01
+	BREQ decod_hora
+	
+	RJMP maincron
+
+incrHorDez:
+	INC HOR_DEZ
+    CPI MODE_SELECT, 0X00
+	BREQ decod
+
+    CPI MODE_SELECT, 0X01
+	BREQ decod_hora
+	
+	RJMP mainCron
+
+decod:
+	MOV DECODENUM, SEG_UNI
+	CBI PORTB, PIN_SEG_DEZ
+	SBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, SEG_DEZ
+	SBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, MIN_UNI
+	CBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	SBI PORTB, PIN_MIN_UNI
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, MIN_DEZ
+	CBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	SBI PORTB, PIN_MIN_DEZ
+	CBI PORTB, PIN_MIN_UNI
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	RJMP main
+	
+
+
+decod_hora:
+	MOV DECODENUM, MIN_UNI
+	CBI PORTB, PIN_SEG_DEZ
+	SBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, MIN_DEZ
+	SBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, HOR_UNI
+	CBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	SBI PORTB, PIN_MIN_UNI
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, HOR_DEZ
+	CBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	SBI PORTB, PIN_MIN_DEZ
+	CBI PORTB, PIN_MIN_UNI
+	RCALL DECODIFICADOR
+	RCALL delay
+
+    RJMP main
+
+
+delay:
+	LDI R19, 16
+	
+volta:
+	DEC R17
+	CPI R17, 0x00
+	BRNE volta
+	
+	DEC R18
+	CPI R18, 0x00
+	BRNE volta
+	
+	DEC R19
+	CPI R19, 0x00
+	BRNE volta
+	RET
+
+
+DECODIFICADOR:
+	CPI DECODENUM, 0x00
+	BREQ case0
+
+	CPI DECODENUM, 0x01
+	BREQ case1
+
+	CPI DECODENUM, 0x02
+	BREQ case2
+	
+	CPI DECODENUM, 0x03
+	BREQ case3
+
+	CPI DECODENUM, 0x04
+	BREQ case4
+
+	CPI DECODENUM, 0x05
+	BREQ case5
+
+	CPI DECODENUM, 0x06
+	BREQ case6
+
+	CPI DECODENUM, 0x07
+	BREQ case7
+
+	CPI DECODENUM, 0x08
+	BREQ case8
+
+	CPI DECODENUM, 0x09
+	BREQ case9
+
+	LDI DECODENUM, 0x06
+	RJMP DISPLAYNUM
+
+
+
+checkpointMain: RJMP main
+
+case0:
+	LDI AUX, 0x40
+	RJMP DISPLAYNUM
+
+case1:
+	LDI AUX, 0x79
+	RJMP DISPLAYNUM
+
+case2:
+	LDI AUX, 0x24
+	RJMP DISPLAYNUM
+
+case3:
+	LDI AUX, 0x30
+	RJMP DISPLAYNUM
+
+case4:
+	LDI AUX, 0x19
+	RJMP DISPLAYNUM
+
+case5:
+	LDI AUX, 0x12
+	RJMP DISPLAYNUM
+
+case6:
+	LDI AUX, 0x02
+	RJMP DISPLAYNUM
+
+case7:
+	LDI AUX, 0x78
+	RJMP DISPLAYNUM
+
+case8:
+	LDI AUX, 0x00
+	RJMP DISPLAYNUM
+
+case9:
+	LDI AUX, 0x18
+
+DISPLAYNUM:
+	OUT DISPLAY, AUX
+	RET
+	
+;-----------------------------------------------------------	
+incrCronSegUni:
+	INC CRON_SEG_UNI
+    RJMP decod_cron
+
+incrCronSegDez:
+	INC CRON_SEG_DEZ
+    RJMP decod_cron
+
+incrCronMinUni:
+	INC CRON_MIN_UNI
+    RJMP decod_cron
+
+incrCronMinDez:
+	INC CRON_MIN_DEZ
+    RJMP decod_cron
+	
+
+mainCron:
+	RCALL delay
+	
+	CPI MODE_SELECT, 0X02
+	BRNE checkpointMain
+	
+	CPI CRON_RESET, 0X01
+	BREQ decod_cron
+	
+	CPI CRON_SEG_UNI, 0x09
+	BRNE incrCronSegUni
+
+	LDI CRON_SEG_UNI, 0x00
+
+	CPI CRON_SEG_DEZ, 0x05
+	BRNE incrCronSegDez
+
+	LDI CRON_SEG_DEZ, 0x00
+
+	CPI CRON_MIN_UNI, 0x09
+	BRNE incrCronMinUni
+	
+	LDI CRON_MIN_UNI, 0x00
+
+	CPI CRON_MIN_DEZ, 0x05
+	BRNE incrCronMinDez
+
+	LDI CRON_MIN_DEZ, 0x00
+	
+	
+	
+decod_cron:
+	MOV DECODENUM, CRON_SEG_UNI
+	CBI PORTB, PIN_SEG_DEZ
+	SBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, CRON_SEG_DEZ
+	SBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, CRON_MIN_UNI
+	CBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	CBI PORTB, PIN_MIN_DEZ
+	SBI PORTB, PIN_MIN_UNI
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	MOV DECODENUM, CRON_MIN_DEZ
+	CBI PORTB, PIN_SEG_DEZ
+	CBI PORTB, PIN_SEG_UNI
+	SBI PORTB, PIN_MIN_DEZ
+	CBI PORTB, PIN_MIN_UNI
+	RCALL DECODIFICADOR
+	RCALL delay
+
+	RJMP main
+	
+	
+	
+;--------------------------------------------------------------	
+	
+EXT_INT0:
+    CLI  ; Desativa interrupções globais temporariamente
+    CPI MODE_SELECT, 0x02
+    BREQ RESET_MODE
+    INC MODE_SELECT  ; Alterna o modo
+    SEI  ; Reativa interrupções
+    RETI  ; Retorna da interrupção
+
+RESET_MODE:
+    LDI MODE_SELECT, 0x00  ; Reseta para o modo inicial
+    SEI
+    RETI
+
+EXT_INT1:
+	CLI
+	CPI CRON_RESET, 0X01
+	BREQ RESET_CRON
+	INC CRON_RESET
+	SEI
+	RETI
+	
+RESET_CRON:
+	LDI CRON_RESET, 0X00
+	LDI CRON_SEG_UNI, 0X00
+	LDI CRON_SEG_DEZ, 0X00
+	LDI CRON_MIN_UNI, 0X00
+	LDI CRON_MIN_DEZ, 0X00
+	SEI
+	RETI
+	
